@@ -1,0 +1,129 @@
+# Snipcast — record a rectangular screen region straight into the clipboard.
+#
+# The point is the round trip, not the recording: pick a region with `slurp`,
+# capture it with `wf-recorder` into a *silent* mp4, and put the finished file on
+# the clipboard as `text/uri-list` — so pasting it into a chat is Ctrl+V, the same
+# gesture as a screenshot. Telegram plays a silent mp4 as a looping GIF, which is
+# why audio is never recorded: `wf-recorder` is invoked without `-a`, so the file
+# has no audio stream at all rather than a muted one.
+#
+# The capture itself lives in a headless [[service]] that runs for the whole
+# session, so a recording survives the bar being rebuilt and can be driven from a
+# compositor keybinding with no widget placed. The [[widget]] and [[shortcut]] are
+# thin clients: they mirror the service's "status" and drive it through "command".
+#
+# Click mapping (widget): left = pick a region / stop, right = record the focused
+# output, middle = abort and discard. The shortcut mirrors left/right.
+
+id = "werdin/snipcast"
+name = "Snipcast"
+version = "1.0.0"
+plugin_api = 3
+author = "werdin"
+license = "MIT"
+repository = "https://github.com/werdin/snipcast"
+dependencies = ["wf-recorder", "slurp"]
+icon = "capture"
+description = "Record a screen region to a silent mp4 and put it on the clipboard, ready to paste into a chat."
+tags = ["recording", "video", "bar"]
+
+# Plugin-level settings: one set shared by the service, the widget and the
+# shortcut, edited from Settings → Plugins and readable through getConfig anywhere.
+
+[[setting]]
+key = "directory"
+type = "folder"
+label_key = "settings.directory.label"
+description_key = "settings.directory.description"
+default = "~/Videos/Snipcast"
+
+[[setting]]
+key = "filename_pattern"
+type = "string"
+label_key = "settings.filename_pattern.label"
+description_key = "settings.filename_pattern.description"
+default = "snip_%Y%m%d_%H%M%S"
+
+[[setting]]
+key = "frame_rate"
+type = "int"
+label_key = "settings.frame_rate.label"
+description_key = "settings.frame_rate.description"
+default = 30
+min = 1
+max = 120
+
+[[setting]]
+key = "encoder"
+type = "select"
+label_key = "settings.encoder.label"
+description_key = "settings.encoder.description"
+default = "cpu"
+options = [
+  { value = "cpu", label_key = "settings.encoder.options.cpu" },
+  { value = "vaapi", label_key = "settings.encoder.options.vaapi" },
+]
+
+[[setting]]
+key = "quality"
+type = "int"
+label_key = "settings.quality.label"
+description_key = "settings.quality.description"
+default = 23
+min = 0
+max = 51
+
+[[setting]]
+key = "copy_to_clipboard"
+type = "bool"
+label_key = "settings.copy_to_clipboard.label"
+description_key = "settings.copy_to_clipboard.description"
+default = true
+
+[[setting]]
+key = "show_timer"
+type = "bool"
+label_key = "settings.show_timer.label"
+description_key = "settings.show_timer.description"
+default = true
+
+[[setting]]
+key = "max_duration"
+type = "int"
+label_key = "settings.max_duration.label"
+description_key = "settings.max_duration.description"
+default = 0
+min = 0
+max = 3600
+
+[[setting]]
+key = "hide_inactive"
+type = "bool"
+label_key = "settings.hide_inactive.label"
+description_key = "settings.hide_inactive.description"
+default = false
+
+[[setting]]
+key = "vaapi_device"
+type = "string"
+label_key = "settings.vaapi_device.label"
+description_key = "settings.vaapi_device.description"
+default = "/dev/dri/renderD128"
+advanced = true
+visible_when = { key = "encoder", values = ["vaapi"] }
+
+# Headless background service: owns slurp, the wf-recorder process and the
+# clipboard hand-off, and bridges the "command" / "status" state channels.
+[[service]]
+id = "service"
+entry = "service.luau"
+
+# Bar tile. Thin presentation: mirrors "status", drives the recorder via "command".
+[[widget]]
+id = "snipcast"
+entry = "widget.luau"
+
+# Control-center quick tile, mirroring the same state channels.
+[[shortcut]]
+id = "toggle"
+entry = "shortcut.luau"
