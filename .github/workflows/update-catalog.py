@@ -159,7 +159,7 @@ def toml_bool(value: bool) -> str:
 def render_catalog(plugins: list[dict]) -> str:
     lines = [
         "# This file is auto-generated. Do not edit manually.",
-        "# Cavalier plugin source catalog.",
+        "# Snipcast plugin source catalog.",
         "# Index of every plugin this source ships: the minimum needed to render, search,",
         "# and compat-check the list. The per-plugin plugin.toml stays authoritative; the",
         "# host re-reads it on enable. Keep one [[plugin]] row per plugin subdirectory.",
