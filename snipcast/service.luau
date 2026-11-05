@@ -42,7 +42,9 @@ end
 -- ── Shell helpers ────────────────────────────────────────────────────────────
 -- Commands are handed to a shell, so every path we interpolate must be quoted.
 local function shellQuote(value: string): string
-    return "'" .. value:gsub("'", [["'"']]) .. "'"
+    -- ' → '\'' (close the quote, an escaped quote, reopen). The parentheses
+    -- drop gsub's second return value (the match count).
+    return "'" .. (value:gsub("'", [['\'']])) .. "'"
 end
 
 local function log(msg: string)
