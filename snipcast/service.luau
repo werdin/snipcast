@@ -97,6 +97,7 @@ local startedAt = 0
 local stopRequestedAt = 0
 local outputPath = ""
 local discardOnExit = false
+local killSent = false
 
 local IDLE_INTERVAL = 1000
 local ACTIVE_INTERVAL = 500
@@ -121,6 +122,7 @@ local function goIdle()
     state = "idle"
     startedAt = 0
     stopRequestedAt = 0
+    killSent = false
     noctalia.setUpdateInterval(IDLE_INTERVAL)
     publish()
 end
@@ -371,7 +373,15 @@ function update()
         -- wf-recorder normally exits within a frame or two of SIGINT. If it does
         -- not, something is wedged and a truncated file beats a stuck widget.
         if now() - stopRequestedAt >= STOP_GRACE then
+            if killSent then
+                -- Even SIGKILL produced no exit marker, so the stream itself is
+                -- gone; finish here rather than resend SIGKILL forever.
+                log("no exit marker after SIGKILL, giving up")
+                onRecorderExit()
+                return
+            end
             log("stop timed out, sending SIGKILL")
+            killSent = true
             stopRequestedAt = now()
             noctalia.runAsync(`kill -9 "$(cat {shellQuote(pidFile)} 2>/dev/null)" 2>/dev/null || true`)
         end
