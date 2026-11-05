@@ -9,8 +9,8 @@
 [[plugin]]
 id = "werdin/snipcast"
 name = "Snipcast"
-version = "1.0.0"
-updated_at = 1787748398
+version = "1.0.1"
+updated_at = 1793874163
 added_at = 1787748398
 author = "werdin"
 license = "MIT"
