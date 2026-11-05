@@ -17,7 +17,7 @@
 
 id = "werdin/snipcast"
 name = "Snipcast"
-version = "1.0.0"
+version = "1.0.1"
 plugin_api = 3
 author = "werdin"
 license = "MIT"
