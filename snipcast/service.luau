@@ -102,6 +102,10 @@ local IDLE_INTERVAL = 1000
 local ACTIVE_INTERVAL = 500
 local MIN_SIDE = 16 -- px; guards against a stray click selecting a 1×1 region
 local STOP_GRACE = 5 -- seconds to wait for a clean finalize before SIGKILL
+-- runAsync's timeout is capped at 60 s; a selection left open longer than that
+-- is killed and reads as a cancel.
+local SELECT_TIMEOUT_MS = 60000
+local EXIT_MARKER = "snipcast-exit:"
 
 local function elapsed(): number
     if startedAt == 0 then return 0 end
@@ -206,10 +210,17 @@ local function startRecording(sourceFlags: string)
     -- `echo $$` then `exec` makes the pid file name wf-recorder itself, so a stop
     -- signals exactly this recording instead of pkill-ing every wf-recorder on
     -- the machine. The log is truncated per run so its tail belongs to this one.
-    local cmd = `: > {shellQuote(logFile)}; echo $$ > {shellQuote(pidFile)}; `
+    local recorder = `echo $$ > {shellQuote(pidFile)}; `
         .. `exec wf-recorder {sourceFlags} -f {shellQuote(outputPath)} `
-        .. `-r {cfgInt("frame_rate", 30, 1, 120)} {encoderFlags()} `
-        .. `>> {shellQuote(logFile)} 2>&1`
+        .. `-r {cfgInt("frame_rate", 30, 1, 120)} {encoderFlags()}`
+
+    -- runAsync(cmd, cb) kills its child after a timeout (5 s by default, 60 s at
+    -- most), which would cut every recording short. runStream has no timeout but
+    -- no exit callback either, so the outer shell reports wf-recorder's exit as
+    -- the only line on stdout (wf-recorder's own output goes to the log).
+    local cmd = `: > {shellQuote(logFile)}; `
+        .. `sh -c {shellQuote(recorder)} >> {shellQuote(logFile)} 2>&1; `
+        .. `echo "{EXIT_MARKER}$?"`
 
     log(`starting: {cmd}`)
 
@@ -218,10 +229,16 @@ local function startRecording(sourceFlags: string)
     noctalia.setUpdateInterval(ACTIVE_INTERVAL)
     publish()
 
-    -- The callback fires when wf-recorder exits — that *is* the "recording
+    -- The exit marker arrives when wf-recorder exits — that *is* the "recording
     -- finished" signal, so no polling for a finished file is needed.
-    if not noctalia.runAsync(cmd, onRecorderExit) then
-        log("runAsync refused to launch wf-recorder")
+    local launched = noctalia.runStream(cmd, function(line: string)
+        if line:sub(1, #EXIT_MARKER) == EXIT_MARKER then
+            log(`wf-recorder exited with {line:sub(#EXIT_MARKER + 1)}`)
+            onRecorderExit()
+        end
+    end)
+    if not launched then
+        log("runStream refused to launch wf-recorder")
         outputPath = ""
         goIdle()
         noctalia.notifyError(noctalia.tr("notify.failed"), noctalia.tr("notify.launch-failed"))
@@ -245,6 +262,8 @@ local function startRegion()
     state = "selecting"
     publish()
 
+    -- Without an explicit timeout runAsync kills slurp after 5 s, so a slow drag
+    -- silently turned into a cancelled selection.
     noctalia.runAsync("slurp -d -f '%x,%y %wx%h'", function(result)
         -- A stop or abort may have landed while slurp was up.
         if state ~= "selecting" then return end
@@ -282,7 +301,7 @@ local function startRegion()
         end
 
         startRecording(`-g {shellQuote(`{x},{y} {width}x{height}`)}`)
-    end)
+    end, SELECT_TIMEOUT_MS)
 end
 
 local function startOutput(outputName: string?)
